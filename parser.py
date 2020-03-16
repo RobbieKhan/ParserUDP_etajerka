@@ -22,6 +22,26 @@ PAYLOAD_POSITION_WITH_SCALE = 1
 SCALE_POSITION_RAW = 4
 SCALE_POSITION_WITH_SCALE = 0
 
+def ErrorWindow(__msg):
+    window = Toplevel(mainWindow)
+    window.title('Возникла ошибка')
+    canvas = Canvas(window,
+                    width=400,
+                    height=50,
+                    bg='skyblue',
+                    cursor='arrow')
+    window.resizable(False, False)
+    window.attributes('-topmost', True, '-toolwindow', True)
+    window.geometry("+%d+%d" % (mainWindow.winfo_x() + 470,
+                                mainWindow.winfo_y()
+                                )
+                    )
+    canvas.create_text(200, 25,
+                       anchor=CENTER,
+                       justify='center',
+                       font="TimesNewRoman 12",
+                       text=__msg)
+    canvas.pack()
 
 def Scale_Draw(list):
     global fileName
@@ -30,8 +50,8 @@ def Scale_Draw(list):
         ('Save', 'Сохранить график', 'filesave', 'save_figure'),
     }
     #
-    plot.figure().canvas.set_window_title(f'Динамика скейла файла {fileName}')
-    plot.plot(list, ':', label='Скейл каждого пакета')
+    plot.figure().canvas.set_window_title(f'Динамика скейла файла \'{fileName}\'')
+    plot.plot(list, ':', label='Скейл')
     plot.legend()
     plot.gca().xaxis.set_major_locator(tck.MultipleLocator(base=ceil(len(list) / 5)))
     plot.xticks(rotation=45)
@@ -92,11 +112,30 @@ def Data_Convert_MemorySafe():
     filetoWrite_nogain = None
     filetoWrite_amplified = None
     if var_BuildNoGain.get().__eq__(True):
-        filetoWrite_nogain = open(OUTPUT_FILENAME_NOGAIN, 'wb')
+        try:
+            filetoWrite_nogain = open(OUTPUT_FILENAME_NOGAIN, 'wb')
+        except:
+            # Configuring button
+            buttonConvertObject.config(text='Выполнить',
+                                       state='normal',
+                                       bg="white")
+            ErrorWindow('Невозможно изменить итоговый файл!\nВозможно, он занят другой программой')
+            return
     if var_BuildAmplified.get().__eq__(True):
-        filetoWrite_amplified = open(OUTPUT_FILENAME_AMPLIFIED, 'wb')
+        try:
+            filetoWrite_amplified = open(OUTPUT_FILENAME_AMPLIFIED, 'wb')
+        except:
+            # Configuring button
+            buttonConvertObject.config(text='Выполнить',
+                                       state='normal',
+                                       bg="white")
+            ErrorWindow('Невозможно изменить итоговый файл!\nВозможно, он занят другой программой')
+            return
     # Calculating steps for progress bar
-    stepsToProcess = fileSize // (__packet_size * 20)
+    divider = 20
+    if fileSize / __packet_size < divider:
+        divider = fileSize // __packet_size
+    stepsToProcess = fileSize // (__packet_size * divider)
     # Creating progress bar for scale drawing
     progressBar2 = ttk.Progressbar(mainWindow,
                                    mode='determinate',
@@ -120,18 +159,38 @@ def Data_Convert_MemorySafe():
     # Calculating scale
     minimalScale = 255
     scale = 10
-    fileToRead = open(pathName, 'rb')
+    try:
+        fileToRead = open(pathName, 'rb')
+    except:
+        # Configuring button
+        buttonConvertObject.config(text='Выполнить',
+                                   state='normal',
+                                   bg="white")
+        ErrorWindow('Невозможно открыть исходный файл!\nВозможно, он занят другой программой')
+        return
     scaleList = []
+    packetNumberCur = 0
+    packetNumberOld = 0
+    packetNumberErrors = 0
     while True:
         packet = fileToRead.read(__packet_size)
         if packet.__eq__(b''):
             fileToRead.close()
             break
+        # Checking packets's order
+        packetNumberCur = packet[3] << 24 | packet[2] << 16 | packet[1] << 8 | packet[0]
+        if packetNumberOld.__eq__(0):
+            packetNumberOld = packetNumberCur
+        else:
+            if (packetNumberCur-packetNumberOld).__ne__(1):
+                packetNumberErrors += 1
+            packetNumberOld = packetNumberCur
+        #
         if var_BuildGraph.get().__eq__(True):
             scaleList.append(packet[__scale_position])
             progressCounter += 1
             if (progressCounter % stepsToProcess).__eq__(0):
-                progressBar2['value'] += 5
+                progressBar2['value'] += 100/divider
                 progressBar2.update()
         minimalScale = packet[__scale_position] if packet[__scale_position].__lt__(
             minimalScale) else minimalScale
@@ -139,8 +198,16 @@ def Data_Convert_MemorySafe():
     # Settings initial state for progress bar's count
     progressCounter = 0
     # Processing each packet
-    fileToRead = open(pathName, 'rb')
-    print(time.strftime('Start - %M %S', time.localtime()))
+    try:
+        fileToRead = open(pathName, 'rb')
+    except:
+        # Configuring button
+        buttonConvertObject.config(text='Выполнить',
+                                   state='normal',
+                                   bg="white")
+        ErrorWindow('Невозможно открыть исходный файл!\nВозможно, он занят другой программой')
+        return
+    #print(time.strftime('Start - %M %S', time.localtime()))
     if var_BuildNoGain.get().__eq__(True) or var_BuildAmplified.get().__eq__(True):
         if True:
             POWER_LIST = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384]
@@ -150,7 +217,7 @@ def Data_Convert_MemorySafe():
                     break
                 progressCounter += 1
                 if (progressCounter % stepsToProcess).__eq__(0):
-                    progressBar['value'] += 5
+                    progressBar['value'] += 100/divider
                     progressBar.update()
                 # Writing nogain file
                 if var_BuildNoGain.get().__eq__(True):
@@ -176,7 +243,7 @@ def Data_Convert_MemorySafe():
                     packetToWrite += bytearray(packet[step:step+PAYLOAD_SIZE])
                 filetoWrite_nogain.write(packetToWrite)
             pass
-    print(time.strftime('End - %M %S', time.localtime()))
+    #print(time.strftime('End - %M %S', time.localtime()))
     # Closing all files
     if var_BuildNoGain.get().__eq__(True) or var_BuildAmplified.get().__eq__(True):
         canvas.itemconfig(textResult_1, text='Создан файлы:')
@@ -196,6 +263,8 @@ def Data_Convert_MemorySafe():
                                state='normal',
                                bg="white")
     # Drawing scale graph
+    if packetNumberErrors.__gt__(0):
+        ErrorWindow(f'Некоторые пакеты идут не по порядку!\nЧисло зафиксированных ошибок - {packetNumberErrors}')
     if var_BuildGraph.get().__eq__(True):
         Scale_Draw(scaleList)
 
