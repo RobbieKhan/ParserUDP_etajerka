@@ -173,18 +173,19 @@ def Data_Convert_MemorySafe():
     packetNumberOld = 0
     packetNumberErrors = 0
     while True:
-        packet = fileToRead.read(__packet_size)
+        packet= fileToRead.read(__packet_size)
         if packet.__eq__(b''):
             fileToRead.close()
             break
-        # Checking packets's order
-        packetNumberCur = packet[3] << 24 | packet[2] << 16 | packet[1] << 8 | packet[0]
-        if packetNumberOld.__eq__(0):
-            packetNumberOld = packetNumberCur
-        else:
-            if (packetNumberCur-packetNumberOld).__ne__(1):
-                packetNumberErrors += 1
-            packetNumberOld = packetNumberCur
+        # Checking packets's order if we'e processing raw data
+        if dataType.__eq__('Raw'):
+            packetNumberCur = packet[3] << 24 | packet[2] << 16 | packet[1] << 8 | packet[0]
+            if packetNumberOld.__eq__(0):
+                packetNumberOld = packetNumberCur
+            else:
+                if (packetNumberCur-packetNumberOld).__ne__(1):
+                    packetNumberErrors += 1
+                packetNumberOld = packetNumberCur
         #
         if var_BuildGraph.get().__eq__(True):
             scaleList.append(packet[__scale_position])
@@ -263,7 +264,7 @@ def Data_Convert_MemorySafe():
                                state='normal',
                                bg="white")
     # Drawing scale graph
-    if packetNumberErrors.__gt__(0):
+    if packetNumberErrors.__gt__(0) and dataType.__eq__('Raw'):
         ErrorWindow(f'Некоторые пакеты идут не по порядку!\nЧисло зафиксированных ошибок - {packetNumberErrors}')
     if var_BuildGraph.get().__eq__(True):
         Scale_Draw(scaleList)
